@@ -75,3 +75,54 @@ class ProductListing(models.Model):
 
     def __str__(self):
         return f"{self.product.name} - {self.seller.username}"
+    
+    
+    
+    
+class BuyerRequirement(models.Model):
+    STATUS_CHOICES = [
+        ("open", "Open"),
+        ("partially_matched", "Partially Matched"),
+        ("fulfilled", "Fulfilled"),
+        ("cancelled", "Cancelled"),
+    ]
+
+    buyer = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="buyer_requirements",
+    )
+
+    product = models.ForeignKey(
+        Product,
+        on_delete=models.CASCADE,
+        related_name="buyer_requirements",
+    )
+
+    quantity = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+    )
+
+    location = models.CharField(
+        max_length=255,
+    )
+
+    required_by = models.DateTimeField()
+
+    status = models.CharField(
+        max_length=20,
+        choices=STATUS_CHOICES,
+        default="open",
+    )
+
+    created_at = models.DateTimeField(
+        auto_now_add=True,
+    )
+
+    def __str__(self):
+        return (
+            f"{self.buyer.username} - "
+            f"{self.product.name} - "
+            f"{self.quantity}"
+        )

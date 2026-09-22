@@ -5,6 +5,8 @@ from .views import (
     ProductListingListCreateView,
     MyListingsView,
     ProductListingDetailView,
+    BuyerRequirementListCreateView,
+    BuyerRequirementMatchesView,
 )
 
 
@@ -31,5 +33,18 @@ urlpatterns = [
         "listings/<int:pk>/",
         ProductListingDetailView.as_view(),
         name="listing-detail",
+    ),
+    
+    
+    path(
+        "requirements/",
+        BuyerRequirementListCreateView.as_view(),
+        name="buyer-requirements",
+    ),
+    
+    path(
+        "requirements/<int:pk>/matches/",
+        BuyerRequirementMatchesView.as_view(),
+        name="requirement-matches",
     ),
 ]

@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import Product, ProductListing
+from .models import Product, ProductListing, BuyerRequirement
 
 
 class ProductSerializer(serializers.ModelSerializer):
@@ -38,3 +38,37 @@ class ProductListingSerializer(serializers.ModelSerializer):
             "created_at",
             "updated_at",
         ]
+        
+class BuyerRequirementSerializer(serializers.ModelSerializer):
+    buyer = serializers.ReadOnlyField(source="buyer.username")
+    buyer_role = serializers.ReadOnlyField(source="buyer.role")
+
+    class Meta:
+        model = BuyerRequirement
+        fields = [
+            "id",
+            "buyer",
+            "buyer_role",
+            "product",
+            "quantity",
+            "location",
+            "required_by",
+            "status",
+            "created_at",
+        ]
+
+        read_only_fields = [
+            "buyer",
+            "buyer_role",
+            "status",
+            "created_at",
+        ]
+    def validate(self, attrs):
+        user = self.context["request"].user
+
+        if user.role not in ["bulk_buyer", "retailer"]:
+            raise serializers.ValidationError(
+                "Only bulk buyers and retailers can create requirements."
+            )
+
+        return attrs
