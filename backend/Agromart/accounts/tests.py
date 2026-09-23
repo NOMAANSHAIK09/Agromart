@@ -1,7 +1,16 @@
 from django.contrib.auth import get_user_model
 from rest_framework import status
-from rest_framework.test import APITestCase
+from rest_framework.test import APITestCase, APIRequestFactory
+from rest_framework.views import APIView
+from rest_framework.response import Response
 from rest_framework_simplejwt.tokens import RefreshToken
+
+from .permission import (
+    IsFarmer,
+    IsBulkBuyer,
+    IsRetailer,
+    IsConsumer,
+)
 
 
 User = get_user_model()
@@ -25,6 +34,147 @@ class AccountsAPITests(APITestCase):
             "location": "Guntur",
             "phone_number": "9876543210",
         }
+    def test_invalid_login_rejected(self):
+        self.create_user()
+
+        response = self.client.post(
+            self.login_url,
+            {
+                "username": "testfarmer",
+                "password": "WrongPassword123!",
+            },
+            format="json",
+        )
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_401_UNAUTHORIZED,
+        )
+
+    def test_registration_with_invalid_role_rejected(self):
+        invalid_data = self.user_data.copy()
+        invalid_data["role"] = "admin"
+
+        response = self.client.post(
+            self.register_url,
+            invalid_data,
+            format="json",
+        )
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_400_BAD_REQUEST,
+        )
+        self.assertIn("role", response.data)
+
+    def test_registration_with_weak_password_rejected(self):
+        invalid_data = self.user_data.copy()
+        invalid_data["password"] = "123"
+
+        response = self.client.post(
+            self.register_url,
+            invalid_data,
+            format="json",
+        )
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_400_BAD_REQUEST,
+        )
+        self.assertIn("password", response.data)
+
+    def test_registration_with_missing_username_rejected(self):
+        invalid_data = self.user_data.copy()
+        invalid_data.pop("username")
+
+        response = self.client.post(
+            self.register_url,
+            invalid_data,
+            format="json",
+        )
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_400_BAD_REQUEST,
+        )
+        self.assertIn("username", response.data)
+
+    def test_registration_with_invalid_email_rejected(self):
+        invalid_data = self.user_data.copy()
+        invalid_data["email"] = "not-an-email"
+
+        response = self.client.post(
+            self.register_url,
+            invalid_data,
+            format="json",
+        )
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_400_BAD_REQUEST,
+        )
+        self.assertIn("email", response.data)
+
+    def test_change_password_same_password_rejected(self):
+        self.authenticate()
+
+        response = self.client.post(
+            self.change_password_url,
+            {
+                "old_password": "StrongPass123!",
+                "new_password": "StrongPass123!",
+            },
+            format="json",
+        )
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_400_BAD_REQUEST,
+        )
+    def test_user_cannot_access_another_users_profile(self):
+        user_a = self.create_user()
+
+        user_b = User.objects.create_user(
+            username="testconsumer",
+            email="testconsumer@example.com",
+            password="StrongPass123!",
+            role="consumer",
+            location="Hyderabad",
+            phone_number="8888888888",
+        )
+
+        refresh = RefreshToken.for_user(user_a)
+
+        self.client.credentials(
+            HTTP_AUTHORIZATION=f"Bearer {refresh.access_token}"
+        )
+
+        response = self.client.get(
+            f"{self.profile_url}?user_id={user_b.id}"
+        )
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_200_OK,
+        )
+
+        self.assertEqual(
+            response.data["username"],
+            user_a.username,
+        )
+
+        self.assertNotEqual(
+            response.data["username"],
+            user_b.username,
+        )
+    def check_permission(self, permission_class, user):
+        factory = APIRequestFactory()
+        request = factory.get("/test/")
+
+        request.user = user
+
+        permission = permission_class()
+        return permission.has_permission(request, None)
 
     def create_user(self):
         return User.objects.create_user(
@@ -197,4 +347,74 @@ class AccountsAPITests(APITestCase):
         self.assertEqual(
             response.status_code,
             status.HTTP_401_UNAUTHORIZED,
+        )
+
+    def test_farmer_permission(self):
+        user = self.create_user()
+
+        self.assertTrue(
+            self.check_permission(IsFarmer, user)
+        )
+        self.assertFalse(
+            self.check_permission(IsBulkBuyer, user)
+        )
+        self.assertFalse(
+            self.check_permission(IsRetailer, user)
+        )
+        self.assertFalse(
+            self.check_permission(IsConsumer, user)
+        )
+
+    def test_bulk_buyer_permission(self):
+        user = self.create_user()
+        user.role = "bulk_buyer"
+        user.save()
+
+        self.assertTrue(
+            self.check_permission(IsBulkBuyer, user)
+        )
+        self.assertFalse(
+            self.check_permission(IsFarmer, user)
+        )
+        self.assertFalse(
+            self.check_permission(IsRetailer, user)
+        )
+        self.assertFalse(
+            self.check_permission(IsConsumer, user)
+        )
+
+    def test_retailer_permission(self):
+        user = self.create_user()
+        user.role = "retailer"
+        user.save()
+
+        self.assertTrue(
+            self.check_permission(IsRetailer, user)
+        )
+        self.assertFalse(
+            self.check_permission(IsFarmer, user)
+        )
+        self.assertFalse(
+            self.check_permission(IsBulkBuyer, user)
+        )
+        self.assertFalse(
+            self.check_permission(IsConsumer, user)
+        )
+
+    def test_consumer_permission(self):
+        user = self.create_user()
+        user.role = "consumer"
+        user.save()
+
+        self.assertTrue(
+            self.check_permission(IsConsumer, user)
+        )
+        self.assertFalse(
+            self.check_permission(IsFarmer, user)
+        )
+        self.assertFalse(
+            self.check_permission(IsBulkBuyer, user)
+        )
+        self.assertFalse(
+            self.check_permission(IsRetailer, user)
         )
