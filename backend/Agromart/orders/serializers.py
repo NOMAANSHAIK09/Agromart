@@ -62,11 +62,31 @@ class OrderSerializer(serializers.ModelSerializer):
     def validate(self, attrs):
         request = self.context["request"]
 
-        #PATCH/UPDATE validation
+        # PATCH/UPDATE validation: protect fields that are set at creation time.
         if self.instance is not None:
+            protected_fields = {
+                "listing",
+                "quantity",
+                "buyer",
+                "seller",
+                "price_per_unit",
+                "total_amount",
+            }
+
+            for field in protected_fields:
+                if field in self.initial_data:
+                    raise serializers.ValidationError(
+                        {
+                            field: (
+                                f"{field.replace('_', ' ')} cannot be changed "
+                                "after the order is created."
+                            )
+                        }
+                    )
+
             return attrs
 
-    # CREATE validation
+        # CREATE validation
         buyer = request.user
         listing = attrs["listing"]
         quantity = attrs["quantity"]

@@ -455,6 +455,78 @@ class OrderAPITestCase(APITestCase):
             status.HTTP_400_BAD_REQUEST,
         )
 
+    def test_patch_cannot_change_protected_order_fields(self):
+        self.authenticate(self.bulk_buyer)
+
+        response = self.client.post(
+            self.url,
+            {
+                "listing": self.farmer_listing.id,
+                "quantity": "50.00",
+                "delivery_location": "Hyderabad",
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        order_id = response.data["id"]
+
+        original_quantity = response.data["quantity"]
+        original_listing = response.data["listing"]
+        original_total = response.data["total_amount"]
+
+        response = self.client.patch(
+            f"{self.url}{order_id}/",
+            {
+                "listing": self.bulk_listing.id,
+                "quantity": "10.00",
+                "buyer": self.consumer.id,
+                "seller": self.retailer.id,
+                "price_per_unit": "1.00",
+                "total_amount": "1.00",
+                "delivery_location": "Chennai",
+            },
+            format="json",
+        )
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_400_BAD_REQUEST,
+        )
+
+        response = self.client.get(f"{self.url}{order_id}/")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["quantity"], original_quantity)
+        self.assertEqual(response.data["listing"], original_listing)
+        self.assertEqual(response.data["total_amount"], original_total)
+        self.assertEqual(response.data["delivery_location"], "Hyderabad")
+
+    def test_buyer_can_update_delivery_location(self):
+        self.authenticate(self.bulk_buyer)
+
+        response = self.client.post(
+            self.url,
+            {
+                "listing": self.farmer_listing.id,
+                "quantity": "50.00",
+                "delivery_location": "Hyderabad",
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        order_id = response.data["id"]
+
+        response = self.client.patch(
+            f"{self.url}{order_id}/",
+            {"delivery_location": "Chennai"},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["delivery_location"], "Chennai")
+
     # ---------------------------------------------------------
     # CANCELLATION
     # ---------------------------------------------------------
